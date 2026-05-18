@@ -11,6 +11,7 @@ pub const CONFIG_FILENAME: &str = "config.toml";
 #[serde(default)]
 pub struct Config {
     pub tap_threshold_ms: u64,
+    pub trigger_keys: Vec<String>,
     pub tap_action: String,
     pub tap_shortcut: Vec<String>, // ["LWIN", "SPACE"]
     pub layouts: Vec<i32>,
@@ -21,6 +22,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             tap_threshold_ms: 300,
+            trigger_keys: vec!["CAPSLOCK".to_string()],
             tap_action: "switch_layout".to_string(),
             tap_shortcut: vec!["LWIN".to_string(), "SPACE".to_string()],
             layouts: vec![0x0804, 0x0409],

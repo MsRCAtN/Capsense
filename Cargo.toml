@@ -9,6 +9,7 @@ edition = "2024"
 [features]
 default = ["gui"]
 gui = ["windows-sys/Win32_UI_Shell"]
+debug = []
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }

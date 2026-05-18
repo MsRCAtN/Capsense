@@ -20,8 +20,8 @@ still retaining the ability to use `CapsLock` for its original purpose.
 
 ## Features
 
-- Use a short tap of `CapsLock` to switch input methods.
-- Long press to use CapsLock for its original purpose.
+- Use a short tap of `CapsLock`, or another configured key, to switch input methods.
+- Long press a trigger key to use that key for its original purpose.
 - Runs efficiently in the background with minimal resource usage.
 - Easily change the tap threshold and the shortcut triggered.
 
@@ -56,18 +56,24 @@ And of course, you can't control elevated Capsense itself from a non-elevated in
 
 On first run, a `config.toml` file will be created in the same directory. You can customize the following:
 
-- `tap_threshold_ms`: The maximum duration (in milliseconds) for a `CapsLock` press to be considered a "tap". `300` ms
+- `tap_threshold_ms`: The maximum duration (in milliseconds) for a trigger key press to be considered a "tap". `300` ms
   by default.
+- `trigger_keys`: Keys that Capsense treats as tap/long-press triggers. `["CAPSLOCK"]` by default.
+  - Generic modifier names such as `CTRL`, `SHIFT`, `ALT`, and `WIN` match both left and right physical keys.
 - `tap_action`: The action to perform on a tap. Supported actions are:
     - `shortcut`: Trigger a keyboard shortcut (defined by `tap_shortcut`).
     - `switch_layout`: (Default) Rotate through input layouts.
 - `tap_shortcut`: The shortcut to trigger (`["LWIN", "SPACE"]` by default). Supported keys are:
     - `LWIN` (or `WIN`)
+    - `RWIN`
     - `SPACE`
-    - `LCONTROL` (or `CTRL`)
-    - `LSHIFT` (or `SHIFT`)
-    - `LMENU` (or `ALT`)
+    - `LCONTROL`, `RCONTROL` (or `CTRL`)
+    - `LSHIFT`, `RSHIFT` (or `SHIFT`)
+    - `LMENU`, `RMENU` (or `ALT`)
     - `CAPSLOCK`
+    - `TAB`, `ENTER`, `ESC`, `BACKSPACE`, `INSERT`, `DELETE`, `HOME`, `END`, `PAGEUP`, `PAGEDOWN`, `LEFT`, `RIGHT`, `UP`, `DOWN`
+    - Single-letter or single-number keys such as `A` or `1`
+    - Function keys from `F1` to `F24`
 - `layouts`: A list of input layout IDs to rotate through when `tap_action` is set to `switch_layout`.
     - Default: `[0x0804, 0x0409]` (`zh-CN` and `en-GB`).
     - See [Microsoft's documentation](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-lcid/70feba9f-294e-491e-b6eb-56532684c37f) for more layout IDs. Other common ones are:
@@ -112,7 +118,7 @@ cargo build
 cargo build --no-default-features
 
 # Build all
-.\build_all.ps1
+.\build-all.ps1
 ```
 
 ## License

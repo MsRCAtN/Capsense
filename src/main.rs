@@ -7,6 +7,7 @@ use windows_sys::Win32::System::Threading::CreateMutexW;
 use windows_sys::Win32::UI::WindowsAndMessaging::WM_CLOSE;
 
 pub mod config;
+pub mod debug;
 pub mod hook;
 pub mod i18n;
 pub mod ui;

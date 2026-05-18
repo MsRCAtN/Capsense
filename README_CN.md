@@ -18,8 +18,8 @@ macOS 通过将常被闲置的 `CapsLock` 键用作输入源切换键以解决�
 
 ## 功能
 
-- 短按 `CapsLock` 来切换输入法。
-- 长按以切换大写锁定。
+- 短按 `CapsLock` 或其它已配置按键来切换输入法。
+- 长按触发键以使用该按键原本的功能。
 - 在后台高效运行，占用资源极少。
 - 可轻松更改轻按判定阈值和所触发的操作。
 
@@ -52,17 +52,23 @@ Capsense 本身不依赖管理员权限。
 
 首次运行时，Capsense 会在同一目录下创建 `config.toml` 文件。你可以自定义以下内容：
 
-- `tap_threshold_ms`：超过这个时间的按压将被视为长按。默认为 `300` ms。
+- `tap_threshold_ms`：触发键按下时间超过这个值时会被视为长按。默认为 `300` ms。
+- `trigger_keys`：Capsense 用作轻按/长按触发键的按键列表。默认为 `["CAPSLOCK"]`。
+    - `CTRL`、`SHIFT`、`ALT`、`WIN` 这类通用修饰键名称作为触发键时会匹配左右两个物理按键。
 - `tap_action`：在轻按时执行的动作。支持的动作为：
     - `shortcut`：触发一个键盘快捷键（由 `tap_shortcut` 定义）。
     - `switch_layout`：（默认）轮换输入布局。
 - `tap_shortcut`：要触发的快捷键（默认为 `["LWIN", "SPACE"]`）。支持的按键有：
     - `LWIN`（或 `WIN`)
+    - `RWIN`
     - `SPACE`
-    - `LCONTROL`（或 `CTRL`)
-    - `LSHIFT`（或 `SHIFT`)
-    - `LMENU`（或 `ALT`)
+    - `LCONTROL`、`RCONTROL`（或 `CTRL`)
+    - `LSHIFT`、`RSHIFT`（或 `SHIFT`)
+    - `LMENU`、`RMENU`（或 `ALT`)
     - `CAPSLOCK`
+    - `TAB`、`ENTER`、`ESC`、`BACKSPACE`、`INSERT`、`DELETE`、`HOME`、`END`、`PAGEUP`、`PAGEDOWN`、`LEFT`、`RIGHT`、`UP`、`DOWN`
+    - 单个字母或数字按键，例如 `A` 或 `1`
+    - `F1` 到 `F24` 功能键
 - `layouts`：当 `tap_action` 设置为 `switch_layout` 时要轮换的一组输入布局 ID。
     - 默认：`[0x0804, 0x0409]`（`zh-CN` 和 `en-GB`）。
     - 有关更多布局 ID，请参见[微软文档](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-lcid/70feba9f-294e-491e-b6eb-56532684c37f)。其他常见的有：
@@ -105,7 +111,7 @@ cargo build
 cargo build --no-default-features
 
 # Build all
-.\build_all.ps1
+.\build-all.ps1
 ```
 
 ## 许可

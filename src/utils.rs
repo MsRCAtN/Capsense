@@ -1,4 +1,5 @@
 use crate::config::load_config;
+use crate::debug;
 use crate::hook::{WINDOW_CLASS_NAME, WM_RELOAD_CONFIG};
 use std::os::windows::process::CommandExt;
 use std::process::Command;
@@ -24,13 +25,16 @@ use windows_sys::Win32::UI::Input::Ime::{
     ImmGetDefaultIMEWnd, ImmIsIME, IMC_SETCONVERSIONMODE, IME_CMODE_CHINESE, IME_CMODE_SYMBOL,
 };
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
-    GetKeyboardLayout, SendInput, INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VK_CAPITAL,
-    VK_CONTROL, VK_LWIN, VK_MENU, VK_SHIFT, VK_SPACE,
+    GetKeyboardLayout, SendInput, INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VK_BACK,
+    VK_CAPITAL, VK_CONTROL, VK_DELETE, VK_DOWN, VK_END, VK_ESCAPE, VK_F1, VK_HOME, VK_INSERT,
+    VK_LCONTROL, VK_LEFT, VK_LMENU, VK_LSHIFT, VK_LWIN, VK_MENU, VK_NEXT, VK_PRIOR, VK_RCONTROL,
+    VK_RETURN, VK_RIGHT, VK_RMENU, VK_RSHIFT, VK_RWIN, VK_SHIFT, VK_SPACE, VK_TAB, VK_UP,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DispatchMessageW, FindWindowW, GetForegroundWindow,
-    GetMessageW, GetWindowThreadProcessId, PostMessageW, RegisterClassW, SendMessageW, MSG,
-    WM_CLOSE, WM_IME_CONTROL, WM_INPUTLANGCHANGEREQUEST, WNDCLASSW,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, FindWindowW,
+    GetForegroundWindow, GetMessageW, GetWindowThreadProcessId, PostMessageW, PostThreadMessageW,
+    RegisterClassW, SendMessageTimeoutW, MSG, SMTO_NORMAL, WM_CLOSE, WM_IME_CONTROL,
+    WM_INPUTLANGCHANGEREQUEST, WM_QUIT, WNDCLASSW,
 };
 
 use crate::i18n::get_i18n;
@@ -103,16 +107,56 @@ pub(crate) fn execute_custom_shortcut(keys: &[String]) {
     send_inputs(&inputs);
 }
 
-fn parse_vk(key: &str) -> Option<u16> {
-    match key.to_uppercase().as_str() {
+pub(crate) fn parse_vk(key: &str) -> Option<u16> {
+    let normalized = key.to_uppercase();
+    match normalized
+        .strip_prefix('F')
+        .and_then(|n| n.parse::<u16>().ok())
+    {
+        Some(number) if (1..=24).contains(&number) => return Some(VK_F1 + number - 1),
+        _ => {}
+    }
+
+    match normalized.as_str() {
         "LWIN" | "WIN" => Some(VK_LWIN),
+        "RWIN" => Some(VK_RWIN),
         "SPACE" => Some(VK_SPACE),
-        "LCONTROL" | "CTRL" => Some(VK_CONTROL),
-        "LSHIFT" | "SHIFT" => Some(VK_SHIFT),
-        "LMENU" | "ALT" => Some(VK_MENU),
+        "LCONTROL" | "LCTRL" => Some(VK_LCONTROL),
+        "RCONTROL" | "RCTRL" => Some(VK_RCONTROL),
+        "CONTROL" | "CTRL" => Some(VK_CONTROL),
+        "LSHIFT" => Some(VK_LSHIFT),
+        "RSHIFT" => Some(VK_RSHIFT),
+        "SHIFT" => Some(VK_SHIFT),
+        "LMENU" | "LALT" => Some(VK_LMENU),
+        "RMENU" | "RALT" | "ALTGR" => Some(VK_RMENU),
+        "MENU" | "ALT" => Some(VK_MENU),
         "CAPSLOCK" => Some(VK_CAPITAL),
+        "TAB" => Some(VK_TAB),
+        "ENTER" | "RETURN" => Some(VK_RETURN),
+        "ESC" | "ESCAPE" => Some(VK_ESCAPE),
+        "BACKSPACE" | "BACK" => Some(VK_BACK),
+        "INSERT" | "INS" => Some(VK_INSERT),
+        "DELETE" | "DEL" => Some(VK_DELETE),
+        "HOME" => Some(VK_HOME),
+        "END" => Some(VK_END),
+        "PAGEUP" | "PRIOR" => Some(VK_PRIOR),
+        "PAGEDOWN" | "NEXT" => Some(VK_NEXT),
+        "LEFT" => Some(VK_LEFT),
+        "RIGHT" => Some(VK_RIGHT),
+        "UP" => Some(VK_UP),
+        "DOWN" => Some(VK_DOWN),
         s if s.len() == 1 => Some(s.as_bytes()[0] as u16),
         _ => None,
+    }
+}
+
+pub(crate) fn parse_trigger_vks(key: &str) -> Vec<u16> {
+    match key.to_uppercase().as_str() {
+        "WIN" => vec![VK_LWIN, VK_RWIN],
+        "CONTROL" | "CTRL" => vec![VK_CONTROL, VK_LCONTROL, VK_RCONTROL],
+        "SHIFT" => vec![VK_SHIFT, VK_LSHIFT, VK_RSHIFT],
+        "MENU" | "ALT" => vec![VK_MENU, VK_LMENU, VK_RMENU],
+        _ => parse_vk(key).into_iter().collect(),
     }
 }
 
@@ -223,35 +267,50 @@ pub(crate) fn schedule_chinese_ime_mode_sync(hwnd: HWND, require_same_foreground
         .fetch_add(1, Ordering::SeqCst)
         .wrapping_add(1);
 
+    debug::track_focus_sync_spawn();
     thread::spawn(move || {
         thread::sleep(Duration::from_millis(IME_MODE_SYNC_DELAY_MS));
 
         if LATEST_IME_SYNC_REQUEST_ID.load(Ordering::SeqCst) != request_id {
+            debug::track_focus_sync_done();
             return;
         }
 
         unsafe {
             if require_same_foreground && GetForegroundWindow() != hwnd {
+                debug::track_focus_sync_done();
                 return;
             }
 
             let current_hkl = get_keyboard_layout_for_window(hwnd);
             if !is_chinese_ime(current_hkl) {
+                debug::track_focus_sync_done();
                 return;
             }
 
             let ime_hwnd = ImmGetDefaultIMEWnd(hwnd);
             if ime_hwnd == 0 {
+                debug::track_focus_sync_done();
                 return;
             }
 
-            SendMessageW(
+            let mut _result: usize = 0;
+            let ret = SendMessageTimeoutW(
                 ime_hwnd,
                 WM_IME_CONTROL,
                 IMC_SETCONVERSIONMODE as usize,
                 CHINESE_IME_CONVERSION_MODE,
+                SMTO_NORMAL,
+                200,
+                &mut _result,
             );
+            if ret == 0 {
+                debug::SENDMSG_TIMEOUTS.fetch_add(1, Ordering::Relaxed);
+            } else {
+                debug::SENDMSG_SUCCESS.fetch_add(1, Ordering::Relaxed);
+            }
         }
+        debug::track_focus_sync_done();
     });
 }
 
@@ -323,8 +382,20 @@ pub(crate) unsafe fn create_message_window() {
         pt: POINT { x: 0, y: 0 },
     };
     unsafe {
-        while GetMessageW(&mut msg, 0, 0, 0) > 0 {
-            DispatchMessageW(&msg);
+        loop {
+            let ret = GetMessageW(&mut msg, 0, 0, 0);
+            if ret > 0 {
+                DispatchMessageW(&msg);
+            } else if ret == 0 {
+                // WM_QUIT received — normal shutdown of message window thread
+                break;
+            } else {
+                // ret == -1: error. Log and continue.
+                debug::GETMESSAGE_ERRORS_MSG_WINDOW.fetch_add(1, Ordering::Relaxed);
+                let err = windows_sys::Win32::Foundation::GetLastError();
+                eprintln!("GetMessageW error: {} (message window)", err);
+                thread::sleep(Duration::from_millis(100));
+            }
         }
     }
 }
@@ -337,8 +408,15 @@ unsafe extern "system" fn window_proc(
 ) -> LRESULT {
     match msg {
         WM_CLOSE => {
+            debug::WM_CLOSE_RECEIVED.fetch_add(1, Ordering::Relaxed);
             println!("Shutting down...");
-            std::process::exit(0);
+            // Post WM_QUIT to the main hook thread for graceful shutdown
+            let main_tid = crate::hook::MAIN_THREAD_ID.load(Ordering::SeqCst);
+            if main_tid != 0 {
+                unsafe { PostThreadMessageW(main_tid, WM_QUIT, 0, 0) };
+            }
+            unsafe { DestroyWindow(hwnd) };
+            0
         }
         WM_RELOAD_CONFIG => {
             load_config();
@@ -621,5 +699,41 @@ pub fn get_startup_command() -> Option<String> {
                 .trim_matches(char::from(0))
                 .to_string(),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_vk_supports_named_trigger_keys() {
+        assert_eq!(parse_vk("capslock"), Some(VK_CAPITAL));
+        assert_eq!(parse_vk("RWIN"), Some(VK_RWIN));
+        assert_eq!(parse_vk("ENTER"), Some(VK_RETURN));
+        assert_eq!(parse_vk("PAGEUP"), Some(VK_PRIOR));
+        assert_eq!(parse_vk("F12"), Some(VK_F1 + 11));
+        assert_eq!(parse_vk("A"), Some(b'A' as u16));
+        assert_eq!(parse_vk("1"), Some(b'1' as u16));
+    }
+
+    #[test]
+    fn parse_trigger_vks_expands_generic_modifiers() {
+        assert_eq!(parse_trigger_vks("WIN"), vec![VK_LWIN, VK_RWIN]);
+        assert_eq!(
+            parse_trigger_vks("CTRL"),
+            vec![VK_CONTROL, VK_LCONTROL, VK_RCONTROL]
+        );
+        assert_eq!(
+            parse_trigger_vks("SHIFT"),
+            vec![VK_SHIFT, VK_LSHIFT, VK_RSHIFT]
+        );
+        assert_eq!(parse_trigger_vks("ALT"), vec![VK_MENU, VK_LMENU, VK_RMENU]);
+    }
+
+    #[test]
+    fn parse_vk_rejects_unknown_keys() {
+        assert_eq!(parse_vk("F25"), None);
+        assert_eq!(parse_vk("UNKNOWN"), None);
     }
 }
